@@ -7,7 +7,7 @@ namespace mygllib
 {
     class MaterialError
     {};
-        
+    
     class Material
     {
     public:

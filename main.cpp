@@ -93,10 +93,51 @@ void init()
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
     glEnable(GL_NORMALIZE);
+}
 
-    mygllib::Material mat(mygllib::Material::RED_PLASTIC);
-    mat.set();
-    
+void drawRoom(unsigned int d)
+{
+    mygllib::Material(mygllib::Material::WHITE_PLASTIC).set();
+    glBegin(GL_QUADS);
+    if(d & 1)
+    {
+        glNormal3f(1, 0, 0);
+        glVertex3f(0, 0, 0);
+        glVertex3f(2, 0, 0);
+        glVertex3f(2, 2, 0);
+        glVertex3f(0, 2, 0);
+    }
+    if(d & 2)
+    {
+        glNormal3f(0, 0, 1);
+        glVertex3f(2, 0, 0);
+        glVertex3f(2, 0, 2);
+        glVertex3f(2, 2, 2);
+        glVertex3f(2, 2, 0);
+    }
+    if(d & 4)
+    {
+        glNormal3f(1, 0, 0);
+        glVertex3f(2, 0, 2);
+        glVertex3f(0, 0, 2);
+        glVertex3f(0, 2, 2);
+        glVertex3f(2, 2, 2);
+    }
+    if(d & 8)
+    {
+        glNormal3f(0, 0, 1);
+        glVertex3f(0, 0, 2);
+        glVertex3f(0, 0, 0);
+        glVertex3f(0, 2, 0);
+        glVertex3f(0, 2, 2);
+    }
+    mygllib::Material(mygllib::Material::RED_PLASTIC).set();
+    glNormal3f(0, 1, 0);
+    glVertex3f(0, 0, 0);
+    glVertex3f(2, 0, 0);
+    glVertex3f(2, 0, 2);
+    glVertex3f(0, 0, 2);
+    glEnd();
 }
 
 void display()
@@ -106,6 +147,17 @@ void display()
     mygllib::draw_axes();
     mygllib::Light::all_on();
 
+    for(unsigned int i = 0; i < maze.size(); i++)
+    {
+        for(unsigned int j = 0; j < maze.size(); j++)
+        {
+            glPushMatrix();
+            glTranslatef(2*j, 0, 2*i);
+            drawRoom(maze[i][j]);
+            glPopMatrix();
+        }
+    }
+    
     glutSwapBuffers();
 }
 
@@ -150,30 +202,36 @@ int main(int argc, char ** argv)
     // Maze init
     int n;
     std::cin >> n;
+    int rooms = 15;
     for(int i = 0; i < n; i++)
     {
         std::vector< int > t;
-        for(int j = 0; j < n; j++)
-            t.push_back(15);
+        t.push_back(rooms);
+        rooms -= 8;
+        for(int j = 1; j < n; j++)
+            t.push_back(rooms);
         maze.push_back(t);
+        rooms = 14;
     }
     srand(time(NULL));
     int currx = rand() % n;
     int curry = rand() % n;
     std::stack< int > visited;
     visited.push(n * curry + currx);
+    bool done[n][n] = {{0}};
+    done[curry][currx] = 1;
     while(!visited.empty())
     {
         currx = visited.top() % n;
         curry = visited.top() / n;
         std::vector< int > availneighbors;
-        if(currx > 0 && maze[curry][currx - 1] == 15)
+        if(currx > 0 && !done[curry][currx-1])
             availneighbors.push_back(0);
-        if(currx < n - 1 && maze[curry][currx + 1] == 15)
+        if(currx < n - 1 && !done[curry][currx+1])
             availneighbors.push_back(1);
-        if(curry > 0 && maze[curry - 1][currx] == 15)
+        if(curry > 0 && !done[curry-1][currx])
             availneighbors.push_back(2);
-        if(curry < n - 1 && maze[curry + 1][currx] == 15)
+        if(curry < n - 1 && !done[curry+1][currx])
             availneighbors.push_back(3);
         if(availneighbors.empty())
             visited.pop();
@@ -183,27 +241,36 @@ int main(int argc, char ** argv)
             switch(availneighbors[i])
             {
                 case 0: // W
-                    maze[curry][currx] -= 8;
+                    if(maze[curry][currx] & 8)
+                        maze[curry][currx] -= 8;
                     currx--;
-                    maze[curry][currx] -= 2;
+                    if(maze[curry][currx] & 2)
+                        maze[curry][currx] -= 2;
                     break;
                 case 1: // E
-                    maze[curry][currx] -= 2;
+                    if(maze[curry][currx] & 2)
+                        maze[curry][currx] -= 2;
                     currx++;
-                    maze[curry][currx] -= 8;
+                    if(maze[curry][currx] & 8)
+                        maze[curry][currx] -= 8;
                     break;
                 case 2: // N
-                    maze[curry][currx] -= 1;
+                    if(maze[curry][currx] & 1)
+                        maze[curry][currx] -= 1;
                     curry--;
-                    maze[curry][currx] -= 4;
+                    if(maze[curry][currx] & 4)
+                        maze[curry][currx] -= 4;
                     break;
                 case 3: // S
-                    maze[curry][currx] -= 4;
+                    if(maze[curry][currx] & 4)
+                        maze[curry][currx] -= 4;
                     curry++;
-                    maze[curry][currx] -= 1;
+                    if(maze[curry][currx] & 1)
+                        maze[curry][currx] -= 1;
                     break;
             }
             visited.push(curry * n + currx);
+            done[curry][currx] = 1;
         }
     }
     
@@ -214,14 +281,14 @@ int main(int argc, char ** argv)
         std::cout << std::endl;
     }
     
-    // mygllib::WIN_W = 600;
-    // mygllib::WIN_H = 600;
-    // mygllib::init3d();
-    // init();
-    // glutDisplayFunc(display);
-    // glutReshapeFunc(mygllib::Reshape::reshape);
-    // glutKeyboardFunc(keyboard);    
-    // glutMainLoop();
+    mygllib::WIN_W = 600;
+    mygllib::WIN_H = 600;
+    mygllib::init3d();
+    init();
+    glutDisplayFunc(display);
+    glutReshapeFunc(mygllib::Reshape::reshape);
+    glutKeyboardFunc(keyboard);    
+    glutMainLoop();
   
     return 0;
 }
