@@ -11,20 +11,41 @@
 #include "Keyboard.h"
 #include "Reshape.h"
 #include "Material.h"
+#include "ImageFile.h"
 #include "Light.h"
 #include "myglm.h"
 
 mygllib::Light light;
 
 std::vector< std::vector< int >> maze;
+GLuint stoneTexture = 0;
+GLuint hedgeTexture = 0;
 
-void rotate(float & x, float & z, double t)
+void rotate(float & x, float & z, double t, float xpos, float zpos)
 {
     // make a copy of the result x, so we don't change the calc for
     // the z value.
-    float new_x = x * std::cos(t) - z * std::sin(t);
-    z = x * std::sin(t) + z * std::cos(t);
-    x = new_x;
+    float tx = x - xpos;
+    float tz = z - zpos;
+    float new_x = tx * std::cos(t) - tz * std::sin(t);
+    z = zpos + tx * std::sin(t) + tz * std::cos(t);
+    x = xpos + new_x;
+}
+
+void load_external_texture()
+{
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, stoneTexture);
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    
+    BMPFile stoneimage("stone.bmp");
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, stoneimage.width(),
+                 stoneimage.height(), 0, GL_RGB, GL_UNSIGNED_BYTE,
+                 stoneimage.data());
 }
 
 void loadobj(std::vector< glm::vec3 > & vertices,
@@ -79,9 +100,12 @@ void loadobj(std::vector< glm::vec3 > & vertices,
 void init()
 {
     mygllib::View & view = *(mygllib::SingletonView::getInstance());
-    view.eyex() = 10.0f;
-    view.eyey() = 10.0f;
-    view.eyez() = 10.0f;
+    view.eyex() = 1.0f;
+    view.eyey() = 1.0f;
+    view.eyez() = 1.0f;
+    view.refx() = 1.0f;
+    view.refy() = 1.0f;
+    view.refz() = 1.1f;
     view.set_projection();
     view.lookat();
 
@@ -93,49 +117,71 @@ void init()
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
     glEnable(GL_NORMALIZE);
+
+    glGenTextures(1, &stoneTexture);
+    load_external_texture();
 }
 
 void drawRoom(unsigned int d)
 {
-    mygllib::Material(mygllib::Material::WHITE_PLASTIC).set();
+    glBindTexture(GL_TEXTURE_2D, stoneTexture);
     glBegin(GL_QUADS);
     if(d & 1)
     {
         glNormal3f(1, 0, 0);
+        glTexCoord2f(0, 0);
         glVertex3f(0, 0, 0);
+        glTexCoord2f(1, 0);
         glVertex3f(2, 0, 0);
+        glTexCoord2f(1, 1);
         glVertex3f(2, 2, 0);
+        glTexCoord2f(0, 1);
         glVertex3f(0, 2, 0);
     }
     if(d & 2)
     {
         glNormal3f(0, 0, 1);
+        glTexCoord2f(0, 0);
         glVertex3f(2, 0, 0);
+        glTexCoord2f(1, 0);
         glVertex3f(2, 0, 2);
+        glTexCoord2f(1, 1);
         glVertex3f(2, 2, 2);
+        glTexCoord2f(0, 1);
         glVertex3f(2, 2, 0);
     }
     if(d & 4)
     {
         glNormal3f(1, 0, 0);
+        glTexCoord2f(0, 0);
         glVertex3f(2, 0, 2);
+        glTexCoord2f(1, 0);
         glVertex3f(0, 0, 2);
+        glTexCoord2f(1, 1);
         glVertex3f(0, 2, 2);
+        glTexCoord2f(0, 1);
         glVertex3f(2, 2, 2);
     }
     if(d & 8)
     {
         glNormal3f(0, 0, 1);
+        glTexCoord2f(0, 0);
         glVertex3f(0, 0, 2);
+        glTexCoord2f(1, 0);
         glVertex3f(0, 0, 0);
+        glTexCoord2f(1, 1);
         glVertex3f(0, 2, 0);
+        glTexCoord2f(0, 1);
         glVertex3f(0, 2, 2);
     }
-    mygllib::Material(mygllib::Material::RED_PLASTIC).set();
     glNormal3f(0, 1, 0);
+    glTexCoord2f(0, 0);
     glVertex3f(0, 0, 0);
+    glTexCoord2f(1, 0);
     glVertex3f(2, 0, 0);
+    glTexCoord2f(1, 1);
     glVertex3f(2, 0, 2);
+    glTexCoord2f(0, 1);
     glVertex3f(0, 0, 2);
     glEnd();
 }
@@ -147,6 +193,7 @@ void display()
     mygllib::draw_axes();
     mygllib::Light::all_on();
 
+    glEnable(GL_TEXTURE_2D);
     for(unsigned int i = 0; i < maze.size(); i++)
     {
         for(unsigned int j = 0; j < maze.size(); j++)
@@ -157,6 +204,7 @@ void display()
             glPopMatrix();
         }
     }
+    glDisable(GL_TEXTURE_2D);
     
     glutSwapBuffers();
 }
@@ -165,29 +213,72 @@ void keyboard(unsigned char key, int w, int h)
 {
     mygllib::View & view = *(mygllib::SingletonView::getInstance());
 
+    float temp = 0;
     switch (key)
     {
-        case 'x': view.eyex() -= 0.1; break;
-        case 'X': view.eyex() += 0.1; break;
-        case 'y': view.eyey() -= 0.1; break;
-        case 'Y': view.eyey() += 0.1; break;
-        case 'z': view.eyez() -= 0.1; break;
-        case 'Z': view.eyez() += 0.1; break;
-        case 'o':
-            view.eyex() = view.eyex() * 0.9;
-            view.eyey() = view.eyey() * 0.9;
-            view.eyez() = view.eyez() * 0.9;
+        case 'w':
+            view.refy() += 0.01f;
             break;
-        case 'O':
-            view.eyex() = view.eyex() * 1.1;
-            view.eyey() = view.eyey() * 1.1;
-            view.eyez() = view.eyez() * 1.1;
+        case 's':
+            view.refy() -= 0.01f;
             break;
-        case 'r':
-            rotate(view.eyex(), view.eyez(), M_PI/10);
+        case 'a':
+            rotate(view.refx(), view.refz(), -M_PI/20, view.eyex(),
+                   view.eyez());
             break;
-        case 'R':
-            rotate(view.eyex(), view.eyez(), -M_PI/10);
+        case 'd':
+            rotate(view.refx(), view.refz(), M_PI/20, view.eyex(),
+                   view.eyez());
+            break;
+    }
+    
+    view.set_projection();
+    view.lookat();
+    light.set();
+    glutPostRedisplay();
+}
+
+void specialkeyboard(int key, int w, int h)
+{
+    mygllib::View & view = *(mygllib::SingletonView::getInstance());
+
+    float c = 0;
+    float t = 0;
+    switch (key)
+    {
+        case GLUT_KEY_UP:
+            c = view.refx() - view.eyex();
+            view.eyex() = view.refx();
+            view.refx() += c;
+            c = view.refz() - view.eyez();
+            view.eyez() = view.refz();
+            view.refz() += c;
+            break;
+        case GLUT_KEY_DOWN:
+            c = view.refx() - view.eyex();
+            view.refx() = view.eyex();
+            view.eyex() -= c;
+            c = view.refz() - view.eyez();
+            view.refz() = view.eyez();
+            view.eyez() -= c;
+            break;
+        case GLUT_KEY_LEFT:
+            c = view.refx() - view.eyex();
+            t = view.refz() - view.eyez();
+            rotate(c, t, -M_PI/2, 0, 0);
+            view.refx() += c;
+            view.eyex() += c;
+            view.refz() += t;
+            view.eyez() += t;
+            break;
+        case GLUT_KEY_RIGHT:
+            c = view.refx() - view.eyex();
+            t = view.refz() - view.eyez();
+            rotate(c, t, M_PI/2, 0, 0);
+            view.refx() += c;
+            view.eyex() += c;
+            view.refz() += t;
+            view.eyez() += t;
             break;
     }
     
@@ -273,21 +364,15 @@ int main(int argc, char ** argv)
             done[curry][currx] = 1;
         }
     }
-    
-    for(int i = 0; i < n; i++)
-    {
-        for(int j = 0; j < n; j++)
-            std::cout << maze[i][j] << ' ';
-        std::cout << std::endl;
-    }
-    
+        
     mygllib::WIN_W = 600;
     mygllib::WIN_H = 600;
     mygllib::init3d();
     init();
     glutDisplayFunc(display);
     glutReshapeFunc(mygllib::Reshape::reshape);
-    glutKeyboardFunc(keyboard);    
+    glutKeyboardFunc(keyboard);
+    glutSpecialFunc(specialkeyboard);
     glutMainLoop();
   
     return 0;
