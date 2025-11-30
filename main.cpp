@@ -20,6 +20,10 @@ mygllib::Light light;
 std::vector< std::vector< int >> maze;
 GLuint stoneTexture = 0;
 GLuint hedgeTexture = 0;
+float playerx = 1;
+float playerz = 1;
+float playerAngle = 0;
+bool birdseye = 0;
 
 void rotate(float & x, float & z, double t, float xpos, float zpos)
 {
@@ -205,6 +209,14 @@ void display()
         }
     }
     glDisable(GL_TEXTURE_2D);
+    if(birdseye)
+    {
+        glPushMatrix();
+        glTranslatef(playerx, 0, playerz);
+        glRotatef(-playerAngle * (180 / M_PI), 0, 1, 0);
+        glutSolidCone(0.5, 0.5, 20, 20);
+        glPopMatrix();
+    }
     
     glutSwapBuffers();
 }
@@ -217,18 +229,74 @@ void keyboard(unsigned char key, int w, int h)
     switch (key)
     {
         case 'w':
-            view.refy() += 0.01f;
+            if(!birdseye)
+                view.refy() += 0.01f;
             break;
         case 's':
-            view.refy() -= 0.01f;
+            if(!birdseye)
+                view.refy() -= 0.01f;
             break;
         case 'a':
-            rotate(view.refx(), view.refz(), -M_PI/20, view.eyex(),
-                   view.eyez());
+            if(!birdseye)
+                rotate(view.refx(), view.refz(), -M_PI/20, view.eyex(),
+                       view.eyez());
+            playerAngle -= M_PI / 20;
             break;
         case 'd':
-            rotate(view.refx(), view.refz(), M_PI/20, view.eyex(),
-                   view.eyez());
+            if(!birdseye)
+                rotate(view.refx(), view.refz(), M_PI/20, view.eyex(),
+                       view.eyez());
+            playerAngle += M_PI / 20;
+            break;
+        case 'v':
+            birdseye = !birdseye;
+            if(birdseye)
+            {
+                playerx = view.eyex();
+                playerz = view.eyez();
+                view.eyey() = 5;
+                view.refy() = 0;
+                view.refx() = view.eyex();
+                view.refz() = view.eyez() + .1;
+            }
+            else
+            {
+                view.eyey() = 1;
+                view.refy() = 1;
+                float x = 0;
+                float z = .1;
+                rotate(x, z, playerAngle, 0, 0);
+                view.refx() = view.eyex() + x;
+                view.refz() = view.eyez() + z;
+            }
+            break;
+        case 'i':
+            if(birdseye)
+            {
+                view.eyez() += .1;
+                view.refz() += .1;
+            }
+            break;
+        case 'j':
+            if(birdseye)
+            {
+                view.eyex() += .1;
+                view.refx() += .1;
+            }
+            break;
+        case 'l':
+            if(birdseye)
+            {
+                view.eyex() -= .1;
+                view.refx() -= .1;
+            }
+            break;
+        case 'k':
+            if(birdseye)
+            {
+                view.eyez() -= .1;
+                view.refz() -= .1;
+            }
             break;
     }
     
@@ -244,42 +312,75 @@ void specialkeyboard(int key, int w, int h)
 
     float c = 0;
     float t = 0;
-    switch (key)
+    if(birdseye)
     {
-        case GLUT_KEY_UP:
-            c = view.refx() - view.eyex();
-            view.eyex() = view.refx();
-            view.refx() += c;
-            c = view.refz() - view.eyez();
-            view.eyez() = view.refz();
-            view.refz() += c;
-            break;
-        case GLUT_KEY_DOWN:
-            c = view.refx() - view.eyex();
-            view.refx() = view.eyex();
-            view.eyex() -= c;
-            c = view.refz() - view.eyez();
-            view.refz() = view.eyez();
-            view.eyez() -= c;
-            break;
-        case GLUT_KEY_LEFT:
-            c = view.refx() - view.eyex();
-            t = view.refz() - view.eyez();
-            rotate(c, t, -M_PI/2, 0, 0);
-            view.refx() += c;
-            view.eyex() += c;
-            view.refz() += t;
-            view.eyez() += t;
-            break;
-        case GLUT_KEY_RIGHT:
-            c = view.refx() - view.eyex();
-            t = view.refz() - view.eyez();
-            rotate(c, t, M_PI/2, 0, 0);
-            view.refx() += c;
-            view.eyex() += c;
-            view.refz() += t;
-            view.eyez() += t;
-            break;
+        switch (key)
+        {
+            case GLUT_KEY_UP:
+                t = .1;
+                rotate(c, t, playerAngle, 0, 0);
+                playerx += c;
+                playerz += t;
+                break;
+            case GLUT_KEY_DOWN:
+                t = .1;
+                rotate(c, t, playerAngle + M_PI, 0, 0);
+                playerx += c;
+                playerz += t;
+                break;
+            case GLUT_KEY_LEFT:
+                t = .1;
+                rotate(c, t, playerAngle - (M_PI / 2), 0, 0);
+                playerx += c;
+                playerz += t;
+                break;
+            case GLUT_KEY_RIGHT:
+                t = .1;
+                rotate(c, t, playerAngle + (M_PI / 2), 0, 0);
+                playerx += c;
+                playerz += t;
+                break;
+        }
+    }
+    else
+    {
+        switch (key)
+        {
+            case GLUT_KEY_UP:
+                c = view.refx() - view.eyex();
+                view.eyex() = view.refx();
+                view.refx() += c;
+                c = view.refz() - view.eyez();
+                view.eyez() = view.refz();
+                view.refz() += c;
+                break;
+            case GLUT_KEY_DOWN:
+                c = view.refx() - view.eyex();
+                view.refx() = view.eyex();
+                view.eyex() -= c;
+                c = view.refz() - view.eyez();
+                view.refz() = view.eyez();
+                view.eyez() -= c;
+                break;
+            case GLUT_KEY_LEFT:
+                c = view.refx() - view.eyex();
+                t = view.refz() - view.eyez();
+                rotate(c, t, -M_PI/2, 0, 0);
+                view.refx() += c;
+                view.eyex() += c;
+                view.refz() += t;
+                view.eyez() += t;
+                break;
+            case GLUT_KEY_RIGHT:
+                c = view.refx() - view.eyex();
+                t = view.refz() - view.eyez();
+                rotate(c, t, M_PI/2, 0, 0);
+                view.refx() += c;
+                view.eyex() += c;
+                view.refz() += t;
+                view.eyez() += t;
+                break;
+        }
     }
     
     view.set_projection();
