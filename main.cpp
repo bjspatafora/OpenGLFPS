@@ -18,6 +18,8 @@
 mygllib::Light light;
 
 std::vector< std::vector< int >> maze;
+std::vector< glm::vec3 > bullets;
+std::vector< glm::vec3 > bulletvels;
 GLuint stoneTexture = 0;
 GLuint hedgeTexture = 0;
 float playerx = 1;
@@ -198,23 +200,45 @@ void display()
     mygllib::Light::all_on();
 
     glEnable(GL_TEXTURE_2D);
-    for(unsigned int i = 0; i < maze.size(); i++)
+    glPushMatrix();
+    glTranslatef(0, 0, 0);
+    drawRoom(maze[0][0]);
+    glPopMatrix();
+    for(unsigned int j = 1; j < maze.size(); j++)
     {
-        for(unsigned int j = 0; j < maze.size(); j++)
+        glPushMatrix();
+        glTranslatef(2*j, 0, 0);
+        drawRoom(maze[0][j]&7);
+        glPopMatrix();
+    }
+    for(unsigned int i = 1; i < maze.size(); i++)
+    {
+        glPushMatrix();
+        glTranslatef(0, 0, 2*i);
+        drawRoom(maze[i][0]&14);
+        glPopMatrix();
+        for(unsigned int j = 1; j < maze.size(); j++)
         {
             glPushMatrix();
             glTranslatef(2*j, 0, 2*i);
-            drawRoom(maze[i][j]);
+            drawRoom(maze[i][j]&6);
             glPopMatrix();
         }
     }
     glDisable(GL_TEXTURE_2D);
+    for(auto b : bullets)
+    {
+        glPushMatrix();
+        glTranslatef(b[0], b[1], b[2]);
+        glutSolidSphere(.1, 10, 10);
+        glPopMatrix();
+    }
     if(birdseye)
     {
         glPushMatrix();
-        glTranslatef(playerx, 0, playerz);
+        glTranslatef(playerx, 0, playerz-.25);
         glRotatef(-playerAngle * (180 / M_PI), 0, 1, 0);
-        glutSolidCone(0.5, 0.5, 20, 20);
+        glutSolidCone(0.25, 0.5, 20, 20);
         glPopMatrix();
     }
     
@@ -298,12 +322,76 @@ void keyboard(unsigned char key, int w, int h)
                 view.refz() -= .1;
             }
             break;
+        case 'u':
+            if(birdseye && view.eyey() > 2)
+                view.eyey() -= .1;
+            break;
+        case 'o':
+            if(birdseye)
+                view.eyey() += .1;
+            break;
+        case 'f':
+            glm::vec3 pos;
+            glm::vec3 vel;
+            if(birdseye)
+            {
+                vel[2] = 0.3;
+                rotate(vel[0], vel[2], playerAngle, 0, 0);
+                pos[0] = playerx + vel[0];
+                pos[1] = 1;
+                pos[2] = playerz + vel[2];
+            }
+            else
+            {
+                vel[0] = 3 * (view.refx() - view.eyex());
+                vel[1] = 3 * (view.refy() - view.eyey());
+                vel[2] = 3 * (view.refz() - view.eyez());
+                pos[0] = view.eyex() + vel[0];
+                pos[1] = view.eyey() + vel[1];
+                pos[2] = view.eyez() + vel[2];
+            }
+            bullets.push_back(pos);
+            bulletvels.push_back(vel);
     }
     
     view.set_projection();
     view.lookat();
     light.set();
     glutPostRedisplay();
+}
+
+bool validxmove(float x, float z, float dx)
+{
+    if(dx > 0)
+        dx += .25;
+    else
+        dx -= .25;
+    float nx = x + dx;
+    if((nx >= ((int)x / 2) * 2 + 2) || (nx <= ((int)x / 2) * 2))
+    {
+        if(dx < 0)
+            return (maze[(int)z/2][(int)x/2] & 8) == 0;
+        else
+            return (maze[(int)z/2][(int)x/2] & 2) == 0;
+    }
+    return 1;
+}
+
+bool validzmove(float x, float z, float dz)
+{
+    if(dz > 0)
+        dz += .25;
+    else
+        dz -= .25;
+    float nz = z + dz;
+    if((nz >= ((int)z / 2) * 2 + 2) || (nz <= ((int)z / 2) * 2))
+    {
+        if(dz < 0)
+            return (maze[(int)z/2][(int)x/2] & 1) == 0;
+        else
+            return (maze[(int)z/2][(int)x/2] & 4) == 0;
+    }
+    return 1;
 }
 
 void specialkeyboard(int key, int w, int h)
@@ -319,26 +407,34 @@ void specialkeyboard(int key, int w, int h)
             case GLUT_KEY_UP:
                 t = .1;
                 rotate(c, t, playerAngle, 0, 0);
-                playerx += c;
-                playerz += t;
+                if(validxmove(playerx, playerz, c))
+                    playerx += c;
+                if(validzmove(playerx, playerz, t))
+                    playerz += t;
                 break;
             case GLUT_KEY_DOWN:
                 t = .1;
                 rotate(c, t, playerAngle + M_PI, 0, 0);
-                playerx += c;
-                playerz += t;
+                if(validxmove(playerx, playerz, c))
+                    playerx += c;
+                if(validzmove(playerx, playerz, t))
+                    playerz += t;
                 break;
             case GLUT_KEY_LEFT:
                 t = .1;
                 rotate(c, t, playerAngle - (M_PI / 2), 0, 0);
-                playerx += c;
-                playerz += t;
+                if(validxmove(playerx, playerz, c))
+                    playerx += c;
+                if(validzmove(playerx, playerz, t))
+                    playerz += t;
                 break;
             case GLUT_KEY_RIGHT:
                 t = .1;
                 rotate(c, t, playerAngle + (M_PI / 2), 0, 0);
-                playerx += c;
-                playerz += t;
+                if(validxmove(playerx, playerz, c))
+                    playerx += c;
+                if(validzmove(playerx, playerz, t))
+                    playerz += t;
                 break;
         }
     }
@@ -348,37 +444,61 @@ void specialkeyboard(int key, int w, int h)
         {
             case GLUT_KEY_UP:
                 c = view.refx() - view.eyex();
-                view.eyex() = view.refx();
-                view.refx() += c;
-                c = view.refz() - view.eyez();
-                view.eyez() = view.refz();
-                view.refz() += c;
+                t = view.refz() - view.eyez();
+                if(validxmove(view.eyex(), view.eyez(), c))
+                {
+                    view.eyex() = view.refx();
+                    view.refx() += c;
+                }
+                if(validzmove(view.eyex(), view.eyez(), t))
+                {
+                    view.eyez() = view.refz();
+                    view.refz() += t;
+                }
                 break;
             case GLUT_KEY_DOWN:
-                c = view.refx() - view.eyex();
-                view.refx() = view.eyex();
-                view.eyex() -= c;
-                c = view.refz() - view.eyez();
-                view.refz() = view.eyez();
-                view.eyez() -= c;
+                c = -(view.refx() - view.eyex());
+                t = -(view.refz() - view.eyez());
+                if(validxmove(view.eyex(), view.eyez(), c))
+                {
+                    view.eyex() = view.refx();
+                    view.refx() += c;
+                }
+                if(validzmove(view.eyex(), view.eyez(), t))
+                {
+                    view.eyez() = view.refz();
+                    view.refz() += t;
+                }
                 break;
             case GLUT_KEY_LEFT:
                 c = view.refx() - view.eyex();
                 t = view.refz() - view.eyez();
                 rotate(c, t, -M_PI/2, 0, 0);
-                view.refx() += c;
-                view.eyex() += c;
-                view.refz() += t;
-                view.eyez() += t;
+                if(validxmove(view.eyex(), view.eyez(), c))
+                {
+                    view.eyex() += c;
+                    view.refx() += c;
+                }
+                if(validzmove(view.eyex(), view.eyez(), t))
+                {
+                    view.eyez() += t;
+                    view.refz() += t;
+                }
                 break;
             case GLUT_KEY_RIGHT:
                 c = view.refx() - view.eyex();
                 t = view.refz() - view.eyez();
                 rotate(c, t, M_PI/2, 0, 0);
-                view.refx() += c;
-                view.eyex() += c;
-                view.refz() += t;
-                view.eyez() += t;
+                if(validxmove(view.eyex(), view.eyez(), c))
+                {
+                    view.eyex() += c;
+                    view.refx() += c;
+                }
+                if(validzmove(view.eyex(), view.eyez(), t))
+                {
+                    view.eyez() += t;
+                    view.refz() += t;
+                }
                 break;
         }
     }
@@ -389,21 +509,25 @@ void specialkeyboard(int key, int w, int h)
     glutPostRedisplay();
 }
 
+void updates(int u)
+{
+    for(unsigned int i = 0; i < bullets.size(); i++)
+        bullets[i] += bulletvels[i];
+    glutPostRedisplay();
+    glutTimerFunc(100, updates, 0);
+}
+
 int main(int argc, char ** argv)
 {
     // Maze init
     int n;
     std::cin >> n;
-    int rooms = 15;
     for(int i = 0; i < n; i++)
     {
         std::vector< int > t;
-        t.push_back(rooms);
-        rooms -= 8;
-        for(int j = 1; j < n; j++)
-            t.push_back(rooms);
+        for(int j = 0; j < n; j++)
+            t.push_back(15);
         maze.push_back(t);
-        rooms = 14;
     }
     srand(time(NULL));
     int currx = rand() % n;
@@ -474,6 +598,7 @@ int main(int argc, char ** argv)
     glutReshapeFunc(mygllib::Reshape::reshape);
     glutKeyboardFunc(keyboard);
     glutSpecialFunc(specialkeyboard);
+    glutTimerFunc(100, updates, 0);
     glutMainLoop();
   
     return 0;
