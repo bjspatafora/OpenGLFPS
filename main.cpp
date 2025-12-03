@@ -20,6 +20,8 @@ mygllib::Light light;
 std::vector< std::vector< int >> maze;
 std::vector< glm::vec3 > bullets;
 std::vector< glm::vec3 > bulletvels;
+std::vector< glm::vec3 > enemies;
+std::vector< glm::vec3 > enemymov;
 GLuint stoneTexture = 0;
 GLuint hedgeTexture = 0;
 float playerx = 1;
@@ -226,6 +228,14 @@ void display()
         }
     }
     glDisable(GL_TEXTURE_2D);
+    for(auto e : enemies)
+    {
+        glPushMatrix();
+        glTranslatef(e[0], .75, e[2]);
+        glScalef(.5, 1.5, .5);
+        glutSolidCube(1);
+        glPopMatrix();
+    }
     for(auto b : bullets)
     {
         glPushMatrix();
@@ -461,13 +471,13 @@ void specialkeyboard(int key, int w, int h)
                 t = -(view.refz() - view.eyez());
                 if(validxmove(view.eyex(), view.eyez(), c))
                 {
-                    view.eyex() = view.refx();
-                    view.refx() += c;
+                    view.refx() = view.eyex();
+                    view.eyex() += c;
                 }
                 if(validzmove(view.eyex(), view.eyez(), t))
                 {
-                    view.eyez() = view.refz();
-                    view.refz() += t;
+                    view.refz() = view.eyez();
+                    view.eyez() += t;
                 }
                 break;
             case GLUT_KEY_LEFT:
@@ -513,6 +523,59 @@ void updates(int u)
 {
     for(unsigned int i = 0; i < bullets.size(); i++)
         bullets[i] += bulletvels[i];
+    for(unsigned int i = 0; i < enemies.size(); i++)
+    {
+        if(enemymov[i][1] == 20)
+        {
+            enemymov[i][0] = 0;
+            enemymov[i][1] = 0;
+            enemymov[i][2] = 0;
+            int dir = rand() % 4;
+            std::cout << "\tDeciding in room " << (int)enemies[i][2]/2 << ", "
+                      << (int)enemies[i][0]/2 << " ... room walls: ";
+            std::cout << maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2]
+                      << std::endl;
+            switch(dir)
+            {
+                case 0:
+                    if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 1)
+                       && enemies[i][2] > 2)
+                    {
+                        std::cout << "\tmoving N\n";
+                        enemymov[i][2] = -.1;
+                    }
+                    break;
+                case 1:
+                    if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 2)
+                       && enemies[i][0] < (maze.size() - 1) * 2)
+                    {
+                        std::cout << "\tmoving W\n";
+                        enemymov[i][0] = .1;
+                    }
+                    break;
+                case 2:
+                    if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 4)
+                       && enemies[i][2] < (maze.size() - 1) * 2)
+                    {
+                        std::cout << "\tmoving S\n";
+                        enemymov[i][2] = .1;
+                    }
+                    break;
+                case 3:
+                    if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 8)
+                       && enemies[i][0] > 2)
+                    {
+                        enemymov[i][0] = -.1;
+                        std::cout << "\tmoving E\n";
+                    }
+                    break;
+            }
+        }
+        enemies[i] += enemymov[i];
+        enemymov[i][1] += 1;
+        enemies[i][1] = 0;
+    }
+    
     glutPostRedisplay();
     glutTimerFunc(100, updates, 0);
 }
@@ -522,6 +585,13 @@ int main(int argc, char ** argv)
     // Maze init
     int n;
     std::cin >> n;
+    // Enemies
+    for(int i = 0; i < n; i++)
+    {
+        enemies.push_back(glm::vec3((rand() % n) * 2 + 1, 0,
+                                    (rand() % n) * 2 + 1));
+        enemymov.push_back(glm::vec3(0, 20, 0));
+    }
     for(int i = 0; i < n; i++)
     {
         std::vector< int > t;
@@ -589,7 +659,15 @@ int main(int argc, char ** argv)
             done[curry][currx] = 1;
         }
     }
-        
+
+    std::cout << "MAZE INIT: \n";
+    for(int i = 0; i < n; i++)
+    {
+        for(int j = 0; j < n; j++)
+            std::cout << maze[i][j] << ' ';
+        std::cout << std::endl;
+    }
+    
     mygllib::WIN_W = 600;
     mygllib::WIN_H = 600;
     mygllib::init3d();
