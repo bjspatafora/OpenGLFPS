@@ -228,7 +228,7 @@ void display()
         }
     }
     glDisable(GL_TEXTURE_2D);
-    for(auto e : enemies)
+    for(const auto & e : enemies)
     {
         glPushMatrix();
         glTranslatef(e[0], .75, e[2]);
@@ -236,7 +236,7 @@ void display()
         glutSolidCube(1);
         glPopMatrix();
     }
-    for(auto b : bullets)
+    for(const auto & b : bullets)
     {
         glPushMatrix();
         glTranslatef(b[0], b[1], b[2]);
@@ -246,9 +246,9 @@ void display()
     if(birdseye)
     {
         glPushMatrix();
-        glTranslatef(playerx, 0, playerz-.25);
+        glTranslatef(playerx, 0, playerz);
         glRotatef(-playerAngle * (180 / M_PI), 0, 1, 0);
-        glutSolidCone(0.25, 0.5, 20, 20);
+        glutSolidCube(0.5);
         glPopMatrix();
     }
     
@@ -343,23 +343,24 @@ void keyboard(unsigned char key, int w, int h)
         case 'f':
             glm::vec3 pos;
             glm::vec3 vel;
-            if(birdseye)
-            {
-                vel[2] = 0.3;
-                rotate(vel[0], vel[2], playerAngle, 0, 0);
-                pos[0] = playerx + vel[0];
-                pos[1] = 1;
-                pos[2] = playerz + vel[2];
-            }
-            else
-            {
-                vel[0] = 3 * (view.refx() - view.eyex());
-                vel[1] = 3 * (view.refy() - view.eyey());
-                vel[2] = 3 * (view.refz() - view.eyez());
-                pos[0] = view.eyex() + vel[0];
-                pos[1] = view.eyey() + vel[1];
-                pos[2] = view.eyez() + vel[2];
-            }
+            // if(birdseye)
+            // {
+            vel[2] = 0.2;
+            rotate(vel[0], vel[2], playerAngle, 0, 0);
+            pos[0] = playerx + vel[0];
+            pos[1] = 1;
+            pos[2] = playerz + vel[2];
+            // }
+            // else
+            // {
+            //     vel[0] = 2 * (view.refx() - view.eyex());
+            //     vel[1] = 2 * (view.refy() - view.eyey());
+            //     vel[2] = 2 * (view.refz() - view.eyez());
+            //     pos[0] = view.eyex() + vel[0];
+            //     pos[1] = view.eyey() + vel[1];
+            //     pos[2] = view.eyez() + vel[2];
+            // }
+            pos += vel;
             bullets.push_back(pos);
             bulletvels.push_back(vel);
     }
@@ -517,6 +518,8 @@ void specialkeyboard(int key, int w, int h)
                 }
                 break;
         }
+        playerx = view.eyex();
+        playerz = view.eyez();
     }
     
     view.set_projection();
@@ -528,30 +531,15 @@ void specialkeyboard(int key, int w, int h)
 bool enemyfire(unsigned int i)
 {
     glm::vec3 travel;
-    float destx = 0;
-    float destz = 0;
-    if(birdseye)
-    {
-        travel[0] = playerx - enemies[i][0];
-        travel[2] = playerz - enemies[i][2];
-        destx = playerx;
-        destz = playerz;
-    }
-    else
-    {
-        mygllib::View & view = *(mygllib::SingletonView::getInstance());
-        travel[0] = view.eyex() - enemies[i][0];
-        travel[2] = view.eyez() - enemies[i][2];
-        destx = view.eyex();
-        destz = view.eyez();
-    }
+    travel[0] = playerx - enemies[i][0];
+    travel[2] = playerz - enemies[i][2];
     travel = glm::normalize(travel);
-    travel *= 0.3;
+    travel *= 0.2;
     glm::vec3 temppos = enemies[i] + travel;
     while(1)
     {
-        if((temppos[0] < destx + .01 && temppos[0] > destx - .01) &&
-           (temppos[2] < destz + .01 && temppos[2] > destz - .01))
+        if((temppos[0] < playerx + .01 && temppos[0] > playerx - .01) &&
+           (temppos[2] < playerz + .01 && temppos[2] > playerz - .01))
             break;
         if(validxmove(temppos[0], temppos[2], travel[0], 0))
             temppos[0] += travel[0];
@@ -573,7 +561,49 @@ void updates(int fire)
     if(fire > 0)
         fire--;
     for(unsigned int i = 0; i < bullets.size(); i++)
-        bullets[i] += bulletvels[i];
+    {
+        if(validxmove(bullets[i][0], bullets[i][2], bulletvels[i][0]) &&
+           validzmove(bullets[i][0], bullets[i][2], bulletvels[i][2]))
+        {
+            bullets[i] += bulletvels[i];
+            if(bullets[i][0] >= playerx - .25 &&
+               bullets[i][0] <= playerx + .25 &&
+               bullets[i][2] >= playerz - .25 &&
+               bullets[i][2] <= playerz + .25)
+            {
+                std::cout << "PLAYER IS HIT\n";
+                bullets.erase(bullets.begin() + i);
+                bulletvels.erase(bulletvels.begin() + i);
+                i--;
+            }
+            else
+            {
+                for(unsigned int j = 0; j < enemies.size(); j++)
+                {
+                    if(bullets[i][0] >= enemies[j][0] - .25 &&
+                       bullets[i][0] <= enemies[j][0] + .25 &&
+                       bullets[i][2] >= enemies[j][2] - .25 &&
+                       bullets[i][2] <= enemies[j][2] + .25)
+                    {
+                        std::cout << "ENEMY HIT\n";
+                        enemies.erase(enemies.begin() + j);
+                        enemymov.erase(enemymov.begin() + j);
+                        bullets.erase(bullets.begin() + i);
+                        bulletvels.erase(bulletvels.begin() + i);
+                        std::cout << "ENEMIES LEFT: " << enemies.size()
+                                  << std::endl;
+                        break;
+                    }
+                }
+            }
+        }
+        else
+        {
+            bullets.erase(bullets.begin() + i);
+            bulletvels.erase(bulletvels.begin() + i);
+            i--;
+        }
+    }
     bool fired = 0;
     for(unsigned int i = 0; i < enemies.size(); i++)
     {
