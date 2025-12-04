@@ -370,12 +370,15 @@ void keyboard(unsigned char key, int w, int h)
     glutPostRedisplay();
 }
 
-bool validxmove(float x, float z, float dx)
+bool validxmove(float x, float z, float dx, bool player = 1)
 {
-    if(dx > 0)
-        dx += .25;
-    else
-        dx -= .25;
+    if(player)
+    {
+        if(dx > 0)
+            dx += .25;
+        else
+            dx -= .25;
+    }
     float nx = x + dx;
     if((nx >= ((int)x / 2) * 2 + 2) || (nx <= ((int)x / 2) * 2))
     {
@@ -387,12 +390,15 @@ bool validxmove(float x, float z, float dx)
     return 1;
 }
 
-bool validzmove(float x, float z, float dz)
+bool validzmove(float x, float z, float dz, bool player = 1)
 {
-    if(dz > 0)
-        dz += .25;
-    else
-        dz -= .25;
+    if(player)
+    {
+        if(dz > 0)
+            dz += .25;
+        else
+            dz -= .25;
+    }
     float nz = z + dz;
     if((nz >= ((int)z / 2) * 2 + 2) || (nz <= ((int)z / 2) * 2))
     {
@@ -519,55 +525,90 @@ void specialkeyboard(int key, int w, int h)
     glutPostRedisplay();
 }
 
-void updates(int u)
+bool enemyfire(unsigned int i)
 {
+    glm::vec3 travel;
+    float destx = 0;
+    float destz = 0;
+    if(birdseye)
+    {
+        travel[0] = playerx - enemies[i][0];
+        travel[2] = playerz - enemies[i][2];
+        destx = playerx;
+        destz = playerz;
+    }
+    else
+    {
+        mygllib::View & view = *(mygllib::SingletonView::getInstance());
+        travel[0] = view.eyex() - enemies[i][0];
+        travel[2] = view.eyez() - enemies[i][2];
+        destx = view.eyex();
+        destz = view.eyez();
+    }
+    travel = glm::normalize(travel);
+    travel *= 0.3;
+    glm::vec3 temppos = enemies[i] + travel;
+    while(1)
+    {
+        if((temppos[0] < destx + .01 && temppos[0] > destx - .01) &&
+           (temppos[2] < destz + .01 && temppos[2] > destz - .01))
+            break;
+        if(validxmove(temppos[0], temppos[2], travel[0], 0))
+            temppos[0] += travel[0];
+        else
+            return 0;
+        if(validzmove(temppos[0], temppos[2], travel[2], 0))
+            temppos[2] += travel[2];
+        else
+            return 0;
+    }
+    glm::vec3 newbullet = {enemies[i][0], 1, enemies[i][2]};
+    bullets.push_back(newbullet + travel);
+    bulletvels.push_back(travel);
+    return 1;
+}
+
+void updates(int fire)
+{
+    if(fire > 0)
+        fire--;
     for(unsigned int i = 0; i < bullets.size(); i++)
         bullets[i] += bulletvels[i];
+    bool fired = 0;
     for(unsigned int i = 0; i < enemies.size(); i++)
     {
+        if(!fire && enemyfire(i))
+        {
+            fired = 1;
+            continue;
+        }
         if(enemymov[i][1] == 20)
         {
             enemymov[i][0] = 0;
             enemymov[i][1] = 0;
             enemymov[i][2] = 0;
             int dir = rand() % 4;
-            std::cout << "\tDeciding in room " << (int)enemies[i][2]/2 << ", "
-                      << (int)enemies[i][0]/2 << " ... room walls: ";
-            std::cout << maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2]
-                      << std::endl;
             switch(dir)
             {
                 case 0:
                     if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 1)
                        && enemies[i][2] > 2)
-                    {
-                        std::cout << "\tmoving N\n";
                         enemymov[i][2] = -.1;
-                    }
                     break;
                 case 1:
                     if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 2)
                        && enemies[i][0] < (maze.size() - 1) * 2)
-                    {
-                        std::cout << "\tmoving W\n";
                         enemymov[i][0] = .1;
-                    }
                     break;
                 case 2:
                     if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 4)
                        && enemies[i][2] < (maze.size() - 1) * 2)
-                    {
-                        std::cout << "\tmoving S\n";
                         enemymov[i][2] = .1;
-                    }
                     break;
                 case 3:
                     if(!(maze[(int)enemies[i][2]/2][(int)enemies[i][0]/2] & 8)
                        && enemies[i][0] > 2)
-                    {
                         enemymov[i][0] = -.1;
-                        std::cout << "\tmoving E\n";
-                    }
                     break;
             }
         }
@@ -575,9 +616,10 @@ void updates(int u)
         enemymov[i][1] += 1;
         enemies[i][1] = 0;
     }
-    
+    if(fired)
+        fire = 10;
     glutPostRedisplay();
-    glutTimerFunc(100, updates, 0);
+    glutTimerFunc(100, updates, fire);
 }
 
 int main(int argc, char ** argv)
@@ -660,14 +702,6 @@ int main(int argc, char ** argv)
         }
     }
 
-    std::cout << "MAZE INIT: \n";
-    for(int i = 0; i < n; i++)
-    {
-        for(int j = 0; j < n; j++)
-            std::cout << maze[i][j] << ' ';
-        std::cout << std::endl;
-    }
-    
     mygllib::WIN_W = 600;
     mygllib::WIN_H = 600;
     mygllib::init3d();
