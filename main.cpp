@@ -50,6 +50,46 @@ void rotate(float & x, float & z, double t, float xpos, float zpos)
     x = xpos + new_x;
 }
 
+bool validxmove(float x, float z, float dx, bool p = 1)
+{
+    if(p)
+    {
+        if(dx > 0)
+            dx += .25;
+        else
+            dx -= .25;
+    }
+    float nx = x + dx;
+    if((nx >= ((int)x / 2) * 2 + 2) || (nx <= ((int)x / 2) * 2))
+    {
+        if(dx < 0)
+            return (maze[(int)z/2][(int)x/2] & 8) == 0;
+        else
+            return (maze[(int)z/2][(int)x/2] & 2) == 0;
+    }
+    return 1;
+}
+
+bool validzmove(float x, float z, float dz, bool p = 1)
+{
+    if(p)
+    {
+        if(dz > 0)
+            dz += .25;
+        else
+            dz -= .25;
+    }
+    float nz = z + dz;
+    if((nz >= ((int)z / 2) * 2 + 2) || (nz <= ((int)z / 2) * 2))
+    {
+        if(dz < 0)
+            return (maze[(int)z/2][(int)x/2] & 1) == 0;
+        else
+            return (maze[(int)z/2][(int)x/2] & 4) == 0;
+    }
+    return 1;
+}
+
 void load_external_texture()
 {
     glActiveTexture(GL_TEXTURE0);
@@ -140,6 +180,48 @@ void init()
     load_external_texture();
 }
 
+std::vector< std::vector< bool >> visiblerooms()
+{
+    std::vector< std::vector< bool >> res;
+    res.resize(maze.size());
+    for(unsigned int i = 0; i < res.size(); i++)
+        res[i].resize(res.size());
+    
+    glm::vec3 temppos = {player.x, 0, player.z};
+    res[((int)temppos[2])/2][((int)temppos[0])/2] = 1;
+    glm::vec3 poschange = {0, 0, .01};
+    rotate(poschange[0], poschange[2], player.angle + 4*M_PI/10, 0, 0);
+    for(unsigned int i = 0; i < 19; i++)
+    {
+        while(validxmove(temppos[0], temppos[2], poschange[0], 0) &&
+              validzmove(temppos[0], temppos[2], poschange[2], 0))
+        {
+            glm::vec3 aftermov = temppos + poschange;
+            if(((int)temppos[0]) / 2 != ((int)aftermov[0]) / 2 &&
+               ((int)temppos[2]) / 2 != ((int)aftermov[2]) / 2)
+                break;
+            temppos = aftermov;
+            res[((int)temppos[2])/2][((int)temppos[0])/2] = 1;
+        }
+        int mazex = (int)temppos[0] / 2;
+        int mazez = (int)temppos[2] / 2;
+        if(!(maze[mazez][mazex] & 1))
+            res[mazez-1][mazex] = 1;
+        if(!(maze[mazez][mazex] & 2))
+            res[mazez][mazex+1] = 1;
+        if(!(maze[mazez][mazex] & 4))
+            res[mazez+1][mazex] = 1;
+        if(!(maze[mazez][mazex] & 8))
+            res[mazez][mazex-1] = 1;
+        temppos = {player.x, 0, player.z};
+        float tchangex = poschange[0];
+        float tchangez = poschange[2];
+        rotate(tchangex, tchangez, -M_PI/20, 0, 0);
+        poschange = {tchangex, 0, tchangez};
+    }
+    return res;
+}
+
 void drawRoom(unsigned int d)
 {
     glBindTexture(GL_TEXTURE_2D, stoneTexture);
@@ -211,40 +293,188 @@ void display()
     mygllib::draw_axes();
     mygllib::Light::all_on();
 
+    std::vector< std::vector< bool >> visible = visiblerooms();
+
     glEnable(GL_TEXTURE_2D);
-    glPushMatrix();
-    glTranslatef(0, 0, 0);
-    drawRoom(maze[0][0]);
-    glPopMatrix();
+    if(visible[0][0])
+        drawRoom(maze[0][0]);
+    else
+    {
+        glDisable(GL_TEXTURE_2D);
+        glBegin(GL_LINES);
+        if(!(maze[0][0] & 1))
+        {
+            glVertex3f(1, 0, 1);
+            glVertex3f(1, 0, 0);
+        }
+        if(!(maze[0][0] & 2))
+        {
+            glVertex3f(1, 0, 1);
+            glVertex3f(2, 0, 1);
+        }
+        if(!(maze[0][0] & 4))
+        {
+            glVertex3f(1, 0, 1);
+            glVertex3f(1, 0, 2);
+        }
+        if(!(maze[0][0] & 8))
+        {
+            glVertex3f(1, 0, 1);
+            glVertex3f(0, 0, 1);
+        }
+        glEnd();
+        glEnable(GL_TEXTURE_2D);
+    }
+    int drawwall;
     for(unsigned int j = 1; j < maze.size(); j++)
     {
-        glPushMatrix();
-        glTranslatef(2*j, 0, 0);
-        drawRoom(maze[0][j]&7);
-        glPopMatrix();
+        if(visible[0][j])
+        {
+            glPushMatrix();
+            glTranslatef(2*j, 0, 0);
+            drawwall = 15;
+            if(visible[0][j - 1])
+                drawwall -= 8;
+            drawRoom(maze[0][j] & drawwall);
+            glPopMatrix();
+        }
+        else
+        {
+            glDisable(GL_TEXTURE_2D);
+            glPushMatrix();
+            glTranslatef(2*j, 0, 0);
+            glBegin(GL_LINES);
+            if(!(maze[0][j] & 1))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(1, 0, 0);
+            }
+            if(!(maze[0][j] & 2))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(2, 0, 1);
+            }
+            if(!(maze[0][j] & 4))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(1, 0, 2);
+            }
+            if(!(maze[0][j] & 8))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(0, 0, 1);
+            }
+            glEnd();
+            glPopMatrix();
+            glEnable(GL_TEXTURE_2D);
+        }
     }
     for(unsigned int i = 1; i < maze.size(); i++)
     {
-        glPushMatrix();
-        glTranslatef(0, 0, 2*i);
-        drawRoom(maze[i][0]&14);
-        glPopMatrix();
-        for(unsigned int j = 1; j < maze.size(); j++)
+        if(visible[i][0])
         {
             glPushMatrix();
-            glTranslatef(2*j, 0, 2*i);
-            drawRoom(maze[i][j]&6);
+            glTranslatef(0, 0, 2*i);
+            drawwall = 15;
+            if(visible[i-1][0])
+                drawwall -= 1;
+            drawRoom(maze[i][0] & drawwall);
             glPopMatrix();
+        }
+        else
+        {
+            glDisable(GL_TEXTURE_2D);
+            glPushMatrix();
+            glTranslatef(0, 0, 2*i);
+            glBegin(GL_LINES);
+            if(!(maze[i][0] & 1))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(1, 0, 0);
+            }
+            if(!(maze[i][0] & 2))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(2, 0, 1);
+            }
+            if(!(maze[i][0] & 4))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(1, 0, 2);
+            }
+            if(!(maze[i][0] & 8))
+            {
+                glVertex3f(1, 0, 1);
+                glVertex3f(0, 0, 1);
+            }
+            glEnd();
+            glPopMatrix();
+            glEnable(GL_TEXTURE_2D);
+        }
+        for(unsigned int j = 1; j < maze.size(); j++)
+        {
+            if(visible[i][j])
+            {
+                glPushMatrix();
+                glTranslatef(2*j, 0, 2*i);
+                drawwall = 15;
+                if(visible[i-1][j])
+                    drawwall -= 1;
+                if(visible[i][j-1])
+                    drawwall -= 8;
+                drawRoom(maze[i][j] & drawwall);
+                glPopMatrix();
+            }
+            else
+            {
+                glDisable(GL_TEXTURE_2D);
+                glPushMatrix();
+                glTranslatef(2*j, 0, 2*i);
+                glBegin(GL_LINES);
+                if(!(maze[i][j] & 1))
+                {
+                    glVertex3f(1, 0, 1);
+                    glVertex3f(1, 0, 0);
+                }
+                if(!(maze[i][j] & 2))
+                {
+                    glVertex3f(1, 0, 1);
+                    glVertex3f(2, 0, 1);
+                }
+                if(!(maze[i][j] & 4))
+                {
+                    glVertex3f(1, 0, 1);
+                    glVertex3f(1, 0, 2);
+                }
+                if(!(maze[i][j] & 8))
+                {
+                    glVertex3f(1, 0, 1);
+                    glVertex3f(0, 0, 1);
+                }
+                glEnd();
+                glPopMatrix();
+                glEnable(GL_TEXTURE_2D);
+            }
         }
     }
     glDisable(GL_TEXTURE_2D);
     for(const auto & e : enemies)
     {
-        glPushMatrix();
-        glTranslatef(e.pos[0], .75, e.pos[2]);
-        glScalef(.5, 1.5, .5);
-        glutSolidCube(1);
-        glPopMatrix();
+        if(visible[((int)e.pos[2])/2][((int)e.pos[0])/2])
+        {
+            glPushMatrix();
+            glTranslatef(e.pos[0], .75, e.pos[2]);
+            glScalef(.5, 1.5, .5);
+            glutSolidCube(1);
+            glPopMatrix();
+        }
+        else if(birdseye)
+        {
+            glPushMatrix();
+            glTranslatef(e.pos[0], .75, e.pos[2]);
+            glutSolidSphere(0.25, 10, 10);
+            glPopMatrix();
+        }
     }
     for(const auto & b : bullets)
     {
@@ -261,7 +491,7 @@ void display()
         glutSolidCube(0.5);
         glPopMatrix();
     }
-    
+
     glutSwapBuffers();
 }
 
@@ -363,46 +593,6 @@ void keyboard(unsigned char key, int w, int h)
     view.lookat();
     light.set();
     glutPostRedisplay();
-}
-
-bool validxmove(float x, float z, float dx, bool p = 1)
-{
-    if(p)
-    {
-        if(dx > 0)
-            dx += .25;
-        else
-            dx -= .25;
-    }
-    float nx = x + dx;
-    if((nx >= ((int)x / 2) * 2 + 2) || (nx <= ((int)x / 2) * 2))
-    {
-        if(dx < 0)
-            return (maze[(int)z/2][(int)x/2] & 8) == 0;
-        else
-            return (maze[(int)z/2][(int)x/2] & 2) == 0;
-    }
-    return 1;
-}
-
-bool validzmove(float x, float z, float dz, bool p = 1)
-{
-    if(p)
-    {
-        if(dz > 0)
-            dz += .25;
-        else
-            dz -= .25;
-    }
-    float nz = z + dz;
-    if((nz >= ((int)z / 2) * 2 + 2) || (nz <= ((int)z / 2) * 2))
-    {
-        if(dz < 0)
-            return (maze[(int)z/2][(int)x/2] & 1) == 0;
-        else
-            return (maze[(int)z/2][(int)x/2] & 4) == 0;
-    }
-    return 1;
 }
 
 void specialkeyboard(int key, int w, int h)
