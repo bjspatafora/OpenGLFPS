@@ -37,6 +37,9 @@ std::vector< Enemy > enemies;
 std::vector< Bullet > bullets;
 GLuint stoneTexture = 0;
 GLuint hedgeTexture = 0;
+GLuint selfdraw = 0;
+GLuint spheredraw = 0;
+GLuint cyldraw = 0;
 bool birdseye = 0;
 
 void rotate(float & x, float & z, double t, float xpos, float zpos)
@@ -112,7 +115,7 @@ void loadobj(std::vector< glm::vec3 > & vertices,
 {
     vertices.push_back(glm::vec3(0, 0, 0));
     normals.push_back(glm::vec3(0, 0, 0));
-    std::ifstream inputFile("Male.OBJ");
+    std::ifstream inputFile("3DModel.obj");
     std::string line;
     while(std::getline(inputFile, line))
     {
@@ -155,6 +158,167 @@ void loadobj(std::vector< glm::vec3 > & vertices,
         normals[i] = glm::normalize(normals[i]);
 }
 
+std::vector< std::vector< glm::vec3 >>
+surface_of_revolution(const std::vector< glm::vec3 > & vertices,
+                      unsigned int num_segments=20, bool closed=1,
+                      GLfloat angle=0)
+{
+    if(closed)
+        angle = 2 * M_PI;
+    std::vector< std::vector< glm::vec3 >> res;
+    float t = 0;
+    for(unsigned int i = 0; i < num_segments - 1; i++)
+    {
+        std::vector< glm::vec3 > temp;
+        for(auto p = vertices.begin(); p != vertices.end(); p++)
+        {
+            float x = (*p)[0];
+            float z = (*p)[2];
+            rotate(x, z, t, 0, 0);
+            temp.push_back(glm::vec3(x, (*p)[1], z));
+        }
+        res.push_back(temp);
+        t += angle / (num_segments - 1);
+    }
+    res.push_back(res[0]);
+    return res;
+}
+
+std::vector< std::vector< glm::vec3 >>
+get_normals(std::vector< std::vector< glm::vec3 >> & vertices)
+{
+    std::vector< std::vector< glm::vec3 >> res;
+    res.resize(vertices.size());
+    for(unsigned int i = 0; i < vertices.size(); i++)
+        res[i].resize(vertices[0].size());
+    for(int i = 0; i < vertices.size() - 1; i++)
+    {
+        res[i][0] = glm::vec3(0, -1, 0);
+        int j = 1;
+        for(; j < vertices[i].size() - 1; j++)
+        {
+            int li = (i - 1 >= 0? i - 1 : vertices.size() - 2);
+            int bi = (i + 1 < vertices.size()? i + 1 : 1);
+            int lj = (j - 1 >= 0? j - 1 : -1);
+            int bj = (j + 1 < vertices[i].size()? j + 1 : -1);
+            glm::vec3 north;
+            glm::vec3 northeast;
+            glm::vec3 east = vertices[bi][j];
+            glm::vec3 south;
+            glm::vec3 southwest;
+            glm::vec3 west = vertices[li][j];
+            if(lj == -1)
+            {
+                unsigned int newi = (i + vertices.size() / 2) % vertices.size();
+                north = vertices[newi][1];
+                newi = (newi + 1) % vertices.size();
+                northeast = vertices[newi][1];
+            }
+            else
+            {
+                north = vertices[i][lj];
+                northeast = vertices[bi][lj];
+            }
+            if(bj == -1)
+            {
+                unsigned int newi = (i + vertices.size() / 2) % vertices.size();
+                south = vertices[newi][j - 1];
+                newi = (newi - 1) % vertices.size();
+                if(newi <= 0)
+                    newi += vertices.size();
+                southwest = vertices[newi][j-1];
+            }
+            else
+            {
+                south = vertices[i][bj];
+                southwest = vertices[li][bj];
+            }
+            res[i][j] = glm::normalize(glm::cross(northeast, north) +
+                                       glm::cross(east, northeast) +
+                                       glm::cross(south, east) +
+                                       glm::cross(southwest, south) +
+                                       glm::cross(west, southwest) +
+                                       glm::cross(north, west));
+        }
+        res[i][j] = glm::vec3(0, 1, 0);
+    }
+    res[res.size() - 1] = res[0];
+    return res;
+}
+
+void drawSORshape(const std::vector< std::vector< glm::vec3 >> & points,
+                  const std::vector< std::vector< glm::vec3 >> & normals)
+{
+    glBegin(GL_TRIANGLE_STRIP);
+    bool mid = 0;
+    unsigned int i = 0;
+    for(; i < points.size() - 1; i++)
+    {
+        for(unsigned int j = 0; j < points[i].size(); j++)
+        {
+            glNormal3f(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
+            glVertex3f(points[i][j][0], points[i][j][1], points[i][j][2]);
+            glNormal3f(normals[i+1][j][0], normals[i+1][j][1],
+                       normals[i+1][j][2]);
+            glVertex3f(points[i+1][j][0], points[i+1][j][1], points[i+1][j][2]);
+        }
+        i++;
+        if(i == points.size() - 1)
+        {
+            mid = 1;
+            break;
+        }
+        for(unsigned int j = points[i].size() - 1; j > 0; j--)
+        {
+            glNormal3f(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
+            glVertex3f(points[i][j][0], points[i][j][1], points[i][j][2]);
+            glNormal3f(normals[i+1][j][0], normals[i+1][j][1],
+                       normals[i+1][j][2]);
+            glVertex3f(points[i+1][j][0], points[i+1][j][1], points[i+1][j][2]);
+            glNormal3f(normals[i+1][j-1][0], normals[i+1][j-1][1],
+                       normals[i+1][j-1][2]);
+            glVertex3f(points[i+1][j-1][0], points[i+1][j-1][1],
+                       points[i+1][j-1][2]);
+            glNormal3f(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
+            glVertex3f(points[i][j][0], points[i][j][1], points[i][j][2]);
+        }
+        glNormal3f(normals[i][0][0], normals[i][0][1], normals[i][0][2]);
+        glVertex3f(points[i][0][0], points[i][0][1], points[i][0][2]);
+        glNormal3f(normals[i+1][0][0], normals[i+1][0][1], normals[i+1][0][2]);
+        glVertex3f(points[i+1][0][0], points[i+1][0][1], points[i+1][0][2]);
+    }
+    if(mid)
+    {
+        for(unsigned int j = points[0].size() - 1; j > 0; j--)
+        {
+            glNormal3f(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
+            glVertex3f(points[i][j][0], points[i][j][1], points[i][j][2]);
+            glNormal3f(normals[0][j][0], normals[0][j][1], normals[0][j][2]);
+            glVertex3f(points[0][j][0], points[0][j][1], points[0][j][2]);
+            glNormal3f(normals[0][j-1][0], normals[0][j-1][1],
+                       normals[0][j-1][2]);
+            glVertex3f(points[0][j-1][0], points[0][j-1][1], points[0][j-1][2]);
+            glNormal3f(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
+            glVertex3f(points[i][j][0], points[i][j][1], points[i][j][2]);
+        }
+        glNormal3f(normals[i][0][0], normals[i][0][1], normals[i][0][2]);
+        glVertex3f(points[i][0][0], points[i][0][1], points[i][0][2]);
+        glNormal3f(normals[0][0][0], normals[0][0][1], normals[0][0][2]);
+        glVertex3f(points[0][0][0], points[0][0][1], points[0][0][2]);
+    }
+    else
+    {
+        for(unsigned int j = 0; j < points[i].size(); j++)
+        {
+            glNormal3f(normals[i][j][0], normals[i][j][1], normals[i][j][2]);
+            glVertex3f(points[i][j][0], points[i][j][1], points[i][j][2]);
+            glNormal3f(normals[0][j][0], normals[0][j][1], normals[0][j][2]);
+            glVertex3f(points[0][j][0], points[0][j][1], points[0][j][2]);
+        }
+    }   
+    glEnd();
+}
+
 void init()
 {
     mygllib::View & view = *(mygllib::SingletonView::getInstance());
@@ -167,6 +331,9 @@ void init()
     view.set_projection();
     view.lookat();
 
+    light.x() = 5;
+    light.z() = 5;
+    light.y() = 10;
     light.on();
     light.set();
     
@@ -175,9 +342,75 @@ void init()
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);
     glEnable(GL_NORMALIZE);
-
+    
     glGenTextures(1, &stoneTexture);
     load_external_texture();
+
+    // spheres
+    std::vector< glm::vec3 > line;
+    for(float i = -M_PI/2; i <= M_PI/2; i += M_PI / 10)
+    {
+        float x = 1;
+        float y = 0;
+        rotate(x, y, i, 0, 0);
+        line.push_back(glm::vec3(x, y, 0));
+    }
+    std::vector< std::vector< glm::vec3 >> points = surface_of_revolution(line,
+                                                                          20,
+                                                                          0,
+                                                                          2*M_PI);
+    std::vector< std::vector< glm::vec3 >> normals = get_normals(points);
+    spheredraw = glGenLists(1);
+    glNewList(spheredraw, GL_COMPILE);
+    drawSORshape(points, normals);
+    glEndList();
+
+    //cylinders
+    line.clear();
+    points.clear();
+    normals.clear();
+    line.push_back({0, -0.5, 0});
+    line.push_back({0.5, -0.5, 0});
+    line.push_back({1, -0.5, 0});
+    line.push_back({1, 0, 0});
+    line.push_back({1, 0.5, 0});
+    line.push_back({0.5, 0.5, 0});
+    line.push_back({0, 0.5, 0});
+    points = surface_of_revolution(line, 20, 0, 2*M_PI);
+    normals = get_normals(points);
+    cyldraw = glGenLists(1);
+    glNewList(cyldraw, GL_COMPILE);
+    drawSORshape(points, normals);
+    glEndList();
+
+    line.clear();
+    std::vector< glm::vec3 > objnorms;
+    std::vector< std::vector< GLuint >> faces;
+    loadobj(line, faces, objnorms);
+    selfdraw = glGenLists(1);
+    glNewList(selfdraw, GL_COMPILE);
+    for(auto v : faces)
+    {
+        switch(v.size())
+        {
+            case 3:
+                glBegin(GL_TRIANGLES);
+                break;
+            case 4:
+                glBegin(GL_QUADS);
+                break;
+            default:
+                glBegin(GL_POLYGON);
+        }
+        for(unsigned int i = 0; i < v.size(); i++)
+        {
+            glNormal3f(objnorms[v[i]][0], objnorms[v[i]][1],
+                       objnorms[v[i]][2]);
+            glVertex3f(line[v[i]][0], line[v[i]][1], line[v[i]][2]);
+        }
+        glEnd();
+    }
+    glEndList();
 }
 
 std::vector< std::vector< bool >> visiblerooms()
@@ -289,8 +522,6 @@ void drawRoom(unsigned int d)
 void display()
 {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    mygllib::Light::all_off();
-    mygllib::draw_axes();
     mygllib::Light::all_on();
 
     std::vector< std::vector< bool >> visible = visiblerooms();
@@ -465,14 +696,15 @@ void display()
             glPushMatrix();
             glTranslatef(e.pos[0], .75, e.pos[2]);
             glScalef(.5, 1.5, .5);
-            glutSolidCube(1);
+            glCallList(cyldraw);
             glPopMatrix();
         }
         else if(birdseye)
         {
             glPushMatrix();
             glTranslatef(e.pos[0], .75, e.pos[2]);
-            glutSolidSphere(0.25, 10, 10);
+            glScalef(.25, .25, .25);
+            glCallList(spheredraw);
             glPopMatrix();
         }
     }
@@ -480,15 +712,16 @@ void display()
     {
         glPushMatrix();
         glTranslatef(b.pos[0], b.pos[1], b.pos[2]);
-        glutSolidSphere(.1, 10, 10);
+        glScalef(.1, .1, .1);
+        glCallList(spheredraw);
         glPopMatrix();
     }
     if(birdseye)
     {
         glPushMatrix();
-        glTranslatef(player.x, 0.25, player.z);
+        glTranslatef(player.x, 0.75, player.z);
         glRotatef(-player.angle * (180 / M_PI), 0, 1, 0);
-        glutSolidCube(0.5);
+        glCallList(selfdraw);
         glPopMatrix();
     }
 
@@ -714,9 +947,8 @@ void specialkeyboard(int key, int w, int h)
 
 bool enemyfire(unsigned int i)
 {
-    glm::vec3 travel;
-    travel[0] = player.x - enemies[i].pos[0];
-    travel[2] = player.z - enemies[i].pos[2];
+    glm::vec3 travel = {player.x - enemies[i].pos[0], 0,
+        player.z - enemies[i].pos[2]};
     travel = glm::normalize(travel);
     travel *= 0.2;
     glm::vec3 temppos = enemies[i].pos + travel;
@@ -795,7 +1027,7 @@ void updates(int fire)
             fired = 1;
             continue;
         }
-        if(enemies[i].mov[1] == 20)
+        if(enemies[i].mov[1] == 40)
         {
             enemies[i].mov[0] = 0;
             enemies[i].mov[1] = 0;
@@ -807,22 +1039,22 @@ void updates(int fire)
                 case 0:
                     if(!(maze[(int)epos[2]/2][(int)epos[0]/2] & 1) &&
                        epos[2] > 2)
-                        emov[2] = -.1;
+                        emov[2] = -.05;
                     break;
                 case 1:
                     if(!(maze[(int)epos[2]/2][(int)epos[0]/2] & 2) &&
                        epos[0] < (maze.size() - 1) * 2)
-                        emov[0] = .1;
+                        emov[0] = .05;
                     break;
                 case 2:
                     if(!(maze[(int)epos[2]/2][(int)epos[0]/2] & 4) &&
                        epos[2] < (maze.size() - 1) * 2)
-                        emov[2] = .1;
+                        emov[2] = .05;
                     break;
                 case 3:
                     if(!(maze[(int)epos[2]/2][(int)epos[0]/2] & 8) &&
                        epos[0] > 2)
-                        emov[0] = -.1;
+                        emov[0] = -.05;
                     break;
             }
         }
@@ -831,9 +1063,9 @@ void updates(int fire)
         enemies[i].pos[1] = 0;
     }
     if(fired)
-        fire = 10;
+        fire = 20;
     glutPostRedisplay();
-    glutTimerFunc(100, updates, fire);
+    glutTimerFunc(50, updates, fire);
 }
 
 int main(int argc, char ** argv)
